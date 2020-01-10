@@ -1,0 +1,328 @@
+---
+title: "Counting RT mutations from illumina sequencing data."
+author: "atb abelew@gmail.com"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    code_download: true
+    code_folding: show
+    fig_caption: true
+    fig_height: 7
+    fig_width: 7
+    highlight: tango
+    keep_md: false
+    mode: selfcontained
+    number_sections: true
+    self_contained: true
+    theme: readable
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+  rmdformats::readthedown:
+    code_download: true
+    code_folding: show
+    df_print: paged
+    fig_caption: true
+    fig_height: 7
+    fig_width: 7
+    highlight: tango
+    width: 300
+    keep_md: false
+    mode: selfcontained
+    toc_float: true
+  BiocStyle::html_document:
+    code_download: true
+    code_folding: show
+    fig_caption: true
+    fig_height: 7
+    fig_width: 7
+    highlight: tango
+    keep_md: false
+    mode: selfcontained
+    toc_float: true
+vignette: >
+  %\VignetteIndexEntry{error_quantification}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+---
+
+<style type="text/css">
+body, td {
+  font-size: 16px;
+}
+code.r{
+  font-size: 16px;
+}
+pre {
+ font-size: 16px
+}
+</style>
+
+```{r options, include=FALSE}
+library("errRt")
+basedir <- system.file("extdata", package="errRt")
+knitr::opts_knit$set(width=120,
+                     root.dir=basedir,
+                     progress=TRUE,
+                     verbose=TRUE,
+                     echo=TRUE)
+knitr::opts_chunk$set(error=TRUE,
+                      dpi=96)
+old_options <- options(digits=4,
+                       stringsAsFactors=FALSE,
+                       knitr.duplicate.label="allow")
+ggplot2::theme_set(ggplot2::theme_bw(base_size=10))
+rundate <- format(Sys.Date(), format="%Y%m%d")
+##tmp <- sm(loadme(filename=paste0(gsub(pattern="\\.Rmd", replace="", x=previous_file), "-v", ver, ".rda.xz")))
+##rmd_file <- "03_expression_infection_20180822.Rmd"
+```
+
+# Calculating error rates.
+
+This document is intended to step through the process followed in these
+estimates of RT error rates.  This R package is a companion to the similarly
+named 'errrt' Perl package, which is responsible for preprocessing the raw
+sequencing data.
+
+# Introduction
+
+An outline of the experimental process is represented by:
+
+![Experimental Design](experimental_design.svg)
+
+The errrt package is responsible for the bottom and right side of the image.  It takes the
+raw fastq data, merges the reads using flash, writes out the index and
+identifier for all reads identical to the template, writes out the sequences for
+the ones not identical to the template, aligns them with fasta36 against the
+template, interprets the fasta36 output, and writes a table of the mismatches,
+insertions, deletions from it.
+
+This package, creatively named 'errRt' takes a sample sheet describing the
+samples, reads the tables of identical reads/mismatches, and creates matrices
+of mutation rates for various classes of mutations.
+
+# Installation
+
+The perl package may be installed via:
+
+```{bash install_errrt, eval=FALSE}
+git clone https://github.com/abelew/errrt
+cd errrt
+perl Build.PL
+perl Build install
+```
+
+The R package may be installed via:
+
+```{r installation, eval=FALSE}
+devtools::install_github("abelew/errRt")
+```
+
+# Preprocessing Steps
+
+I split up the preprocessing into discrete steps so that I could check on each
+phase and try to ensure correctness.  The errrt Perl package was written so that
+pretty much everything may be set via command line parameters, but all the
+defaults were written to suite this data set.  Thus I have a pretty simple bash
+for loop which handled the work of preprocessing the data.
+
+The following fragment of bash was run inside my directory *preprocessing/*,
+which contained 3 subdirectories: *s1/*, *s2/*, and *s3/* which contain the
+raw reads for the 3 samples.  The excel spreadsheet in
+*inst/extdata/all_samples.xlsx* describes them, but s1 is the control, s2 has
+low magnesium, and s3 has high.
+
+```{bash preprocessing, eval=FALSE}
+#!/usr/bin/env bash
+
+## The default options should take care of most of what these require.
+start=$(pwd)
+for sample in $(/bin/ls -d s*); do
+    cd ${sample}
+    ## Merge the forward and reverse reads.
+    merge_reads.pl --read1 *_1.fastq.gz --read2 *_2.fastq.gz
+    ## Extract the reads with the template sequence into a fasta file.
+    ## This assumes input named 'step1.extendedFrags.fastq.xz' and output named 'step2.fasta'
+    ## This output is not compressed because it is easier to invoke fasta36 on uncompressed data.
+    ## Thus it defaults to step2.fasta as output.
+    extract_fasta.pl
+    ## Run fasta against the template sequence.
+    ## This assumes step2.fasta as input and provides step3.txt.xz as output.
+    run_fasta.pl
+    ## Boil the fasta output into something we can read.
+    ## This assumes step3.txt.xz as input and step4.txt.xz as output.
+    parse_fasta.pl
+    cd ${start}
+done
+```
+
+As the above shell fragment states, the final outputs of errrt are *step4.txt.xz*
+and *step2_identical_reads.txt.xz*.  These filenames are therefore recorded in
+the sample sheet in the columns 'ident_table' and 'mutation_table' for each
+sample.
+
+I decided for the moment at least to copy these files into inst/extdata and
+modify the sample sheet in inst/extdata to refer to them.
+
+# Processing the data
+
+I wrapped the various steps performed by errRt into a primary main function,
+*create_matrices()*.  The following is the invocation I used for this data,
+along with some explanation of what is happening.
+
+## Getting Started
+
+```{r getting_started}
+library(errRt)
+basedir <- system.file("extdata", package="errRt")
+metadata_file <- file.path(basedir, "all_samples.xlsx")
+metadata_file
+setwd(basedir)
+meta <- hpgltools::extract_metadata(metadata_file)
+```
+
+Here is the resulting experimental design.  The *create_matrices()* function
+will use this to read the tables of identical reads and mutated reads.
+
+```{r metadata, results='asis'}
+knitr::kable(meta)
+```
+
+## Create matrices
+
+The *create_matrices()* function has a few options to adjust the
+stringency of the various ways to define an error.  It functions to count the
+various error types with *quantify_parsed()*, gather them into matrices by
+sample along with the perceived errors by the sequencer, and calculate aggregate
+error rates for the various classes of error.  In other words, it does pretty
+much everything in one function call.
+
+```{r create_matrices}
+error_data <- create_matrices(sample_sheet=metadata_file, ident_column="identtable",
+                              mut_column="mutationtable", min_reads=3, min_indexes=3,
+                              min_sequencer=10, min_position=24, prune_n=TRUE,
+                              verbose=TRUE)
+```
+
+The options are explained in the help documentation, but here is an overview of
+the ones which might not be self-evident.
+
+*  min_reads:  How many reads/index are required for a given index to be
+   considered usable?  This is the first toggle of stringency and is affected
+   primarily by the sequencing depth.
+*  min_indexes:  How many separate indexes are expected to agree on a given
+   mutation in order for it to be considered real?  This toggle of stringency is
+   primarily affected by the success in getting a large number of different RT
+   primers to bind and extend during the early stages of creating the sequencing
+   libraries.
+*  min_sequencer:  In order for a given mutation to be deemed
+   'sequencer-specific', 1 and only 1 read out of 'n' for a given index must have
+   the mutation.  This toggles 'n', higher numbers are thus more stringent and
+   require greater sequencing depth.  If this is set too low, a pool of
+   false positives will result; the default of 10 is completely arbitrary.
+*  min_position:  In the actual experiment, it appears that the primer used for
+   the experimental samples may have had an error, or it was differently cut out
+   of the PAGE purification gel, or something else happened which resulted in a
+   tremendous percentage of the reads presenting themselves as either a deletion
+   at ~ position 20, or a A to C mutation at position 22 or somesuch.  This
+   parameter just ignores any mutations occuring before this position.  We
+   observed that this strange trend stopped at position 22, and so set it to 24
+   to be safe.
+*  prune_n:  When true, this simply drops entries in the mutation table which
+   have Ns.
+
+*create_matrices()* works in 3 main stages:
+
+1.  For each sample in the metadata, invoke *quantify_parsed()*.  This function
+    is responsible for reading the tables and collating the various error
+    types.  This is the most interesting portion of code and most likely to have
+    problems.
+2.  Collect the various tables from step 1 and merge them into 1 matrix per
+    table where the rows are mutation types and columns are samples.
+3.  Calculate error rates by read/index and write new versions of the matrices
+    from step 2 accordingly.
+
+While *create_matrices()* is running, it should print some information
+about what it is doing and give some idea about how much data is lost due to the
+stringency parameters.  Its result is a list:
+
+*  samples: The result from *quantify_parsed()* for each sample in the metadata.
+*  reads_per_sample: The sum of the reads observed in the mutation data and the
+   identity data, e.g. how many reads survived.
+*  indexes_per_sample: The sum of the indexes observed.  This is our primary
+   normalization factor, but along with reads_per_sample should help define a
+   healthy vs. problematic sample.
+*  matrices: The 'raw' matrices for each table.
+*  matrices_by_counts: The matrices dividied by the indexes.
+*  normalized: The 'raw' matrices as cpm, thus normalized by library sizes.
+*  normalized_by_counts: The matrices as cpm and dividied by indexes.
+
+Thus, as one might imagine, there are a _lot_ of matrices returned, here are
+some examples of the data after normalization, in each case I will first print
+the data for the RT mutations followed by the sequencer:
+
+1.  Mismatches by position as a heatmap: This is quite curious, as we see
+    apparently fewer variants at the end of the sequence.
+
+```{r mismatches_by_position}
+gplots::heatmap.2(error_data[["normalized_by_counts"]][["miss_indexes_by_position"]],
+                  trace="none",
+                  Rowv=FALSE)
+gplots::heatmap.2(error_data[["normalized_by_counts"]][["miss_sequencer_by_position"]],
+                  trace="none",
+                  Rowv=FALSE)
+```
+
+2.  Mismatches by reference nucleotide
+
+```{r reference_nucleotides, results='asis'}
+knitr::kable(error_data[["normalized_by_counts"]][["miss_indexes_by_ref_nt"]])
+knitr::kable(error_data[["normalized_by_counts"]][["miss_sequencer_by_ref_nt"]])
+```
+
+3.  Mismatches by mutated nucleotide
+
+```{r mutated_nucleotides, results='asis'}
+knitr::kable(error_data[["normalized_by_counts"]][["miss_indexes_by_hit_nt"]])
+knitr::kable(error_data[["normalized_by_counts"]][["miss_sequencer_by_hit_nt"]])
+```
+
+4.  Mismatches by type: A to C, G to A etc etc
+
+```{r type_nucleotides, results='asis'}
+knitr::kable(error_data[["normalized_by_counts"]][["miss_indexes_by_type"]])
+knitr::kable(error_data[["normalized_by_counts"]][["miss_sequencer_by_type"]])
+```
+
+5.  Mismatches by transition/transversion
+
+```{r trans_nucleotides, results='asis'}
+knitr::kable(error_data[["normalized_by_counts"]][["miss_indexes_by_trans"]])
+knitr::kable(error_data[["normalized_by_counts"]][["miss_sequencer_by_trans"]])
+```
+
+6.  Mismatches by strong/weak
+
+```{r strength_nucleotides, results='asis'}
+knitr::kable(error_data[["normalized_by_counts"]][["miss_indexes_by_strength"]])
+knitr::kable(error_data[["normalized_by_counts"]][["miss_sequencer_by_strength"]])
+```
+
+7.  Insertions by position
+
+```{r insert_position, results='asis'}
+knitr::kable(error_data[["normalized_by_counts"]][["insert_indexes_by_position"]])
+knitr::kable(error_data[["normalized_by_counts"]][["insert_sequencer_by_position"]])
+```
+
+8.  Insertions by nt
+
+```{r insert_nt, results='asis'}
+knitr::kable(error_data[["normalized_by_counts"]][["insert_indexes_by_nt"]])
+knitr::kable(error_data[["normalized_by_counts"]][["insert_sequencer_by_nt"]])
+```
+
+9.  Deletions by position
+
+There was insufficient data to quantify these.
