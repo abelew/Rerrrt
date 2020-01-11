@@ -1,80 +1,3 @@
-#' Given a samples sheet with some metadata, create a big pile of matrices
-#' describing the data.
-#'
-#' @param sample_sheet xlsx/csv/whatever file of metadata.
-#' @param ident_column Column containing the files of reads identical to the
-#'   template.
-#' @param mut_column Column containing the files of reads not identical to the
-#'   template.
-#' @param min_reads Filter for the minimum number of reads / index.
-#' @param min_indexes Filter for the minimum numer of indexes / mutation.
-#' @param min_sequencer Filter defining the minimum number of reads when looking
-#'   for sequencer-based mutations.
-#' @param min_position Filter against weird data at the beginning of the
-#'   template.
-#' @param prune_n Remove mutations which are something to N.
-#' @param verbose Print information about the running of this function?
-#' @return List with lots of matrices of the resulting data.
-#' @export
-create_matrices <- function(sample_sheet="sample_sheets/all_samples.xlsx",
-                            ident_column="identtable",
-                            mut_column="mutationtable",
-                            min_reads=NULL, min_indexes=NULL,
-                            min_sequencer=10, min_position=NULL,
-                            max_position=NULL, max_mutations_per_read=NULL,
-                            prune_n=TRUE, verbose=TRUE) {
-  meta <- hpgltools::extract_metadata(metadata=sample_sheet)
-  samples <- list()
-  for (s in 1:nrow(meta)) {
-    if (verbose) {
-      message("Starting sample: ", s, ".")
-    }
-    identical <- meta[s, ident_column]
-    changed <- meta[s, mut_column]
-    samples[[s]] <- quantify_parsed(changed=changed, identical=identical, min_reads=min_reads,
-                                    min_indexes=min_indexes, min_sequencer=min_sequencer,
-                                    min_position=min_position, max_position=max_position,
-                                    max_mutations_per_read=max_mutations_per_read,
-                                    prune_n=prune_n, verbose=verbose)
-  }
-  names(samples) <- meta[["sampleid"]]
-
-  tables <- c("miss_reads_by_position", "miss_indexes_by_position", "miss_sequencer_by_position",
-              "miss_reads_by_string", "miss_indexes_by_string", "miss_sequencer_by_string",
-              "miss_reads_by_ref_nt", "miss_indexes_by_ref_nt", "miss_sequencer_by_ref_nt",
-              "miss_reads_by_hit_nt", "miss_indexes_by_hit_nt", "miss_sequencer_by_hit_nt",
-              "miss_reads_by_type", "miss_indexes_by_type", "miss_sequencer_by_type",
-              "miss_reads_by_trans", "miss_indexes_by_trans", "miss_sequencer_by_trans",
-              "miss_reads_by_strength", "miss_indexes_by_strength", "miss_sequencer_by_strength",
-              "insert_reads_by_position", "insert_indexes_by_position", "insert_sequencer_by_position",
-              "insert_reads_by_nt", "insert_indexes_by_nt", "insert_sequencer_by_nt",
-              "delete_reads_by_position", "delete_indexes_by_position", "delete_sequencer_by_position",
-              "delete_reads_by_nt", "delete_indexes_by_nt", "delete_sequencer_by_nt")
-
-  ## Now build up the matrices of data where each matrix should have rownames which make
-  ## sense for its name and the column names should be by sample.  Then the cells should
-  ## be filled in with the data for each sample.
-  pre_normalization_data <- matrices_from_tables(tables, samples, verbose=verbose)
-  matrices <- pre_normalization_data[["matrices"]]
-  indexes_per_sample <- pre_normalization_data[["indexes_per_sample"]]
-  reads_per_sample <- pre_normalization_data[["reads_per_sample"]]
-
-  normalization_data <- normalize_matrices(matrices, reads_per_sample, indexes_per_sample)
-  normalized <- normalization_data[["normalized"]]
-  normalized_by_counts <- normalization_data[["normalized_by_counts"]]
-  matrices_by_counts <- normalization_data[["matrices_by_counts"]]
-
-  retlist <- list(
-    "samples" = samples,
-    "reads_per_sample" = reads_per_sample,
-    "indexes_per_sample" = indexes_per_sample,
-    "matrices" = matrices,
-    "matrices_by_counts" = matrices_by_counts,
-    "normalized" = normalized,
-    "normalized_by_counts" = normalized_by_counts)
-  return(retlist)
-}
-
 #' Combine the columns describing a mutation into a single column and categorize.
 #'
 #' Given a table with columns including the position, mutation type, reference
@@ -171,24 +94,59 @@ quantify_parsed <- function(changed=NULL, identical=NULL, min_reads=NULL,
   start_rows <- nrow(chng)
   end_rows <- start_rows
 
+  starting_chng_indexes <- chng[["index"]]
+  starting_ident_indexes <- ident[["index"]]
+
   mutations_by_read <- chng %>%
     group_by(readid) %>%
     summarise("read_mutants" = n())
   mutations_by_read[["readid"]] <- as.character(mutations_by_read[["readid"]])
 
+  filtered <- c(0, 0, 0, 0, 0, 0)
+  names(filtered) <- c("min_position", "max_position", "prune_n",
+                       "max_mutations_per_read", "mut_indexes", "ident_indexes")
+  reads_remaining <- c(nrow(ident), nrow(chng), 0, 0, 0, 0, 0, 0)
+  names(reads_remaining) <- c("identicals", "mutants", "min_position",
+                              "max_position", "prune_n", "max_mutations_per_read",
+                              "ident_index_pruned", "mut_index_pruned")
+
+  if (verbose) {
+    message("Counting indexes before filtering.")
+  }
+  chng_indexes <- sort(unique(chng[["index"]]))
+  ident_indexes <- sort(unique(ident[["index"]]))
+  all_indexes <- sort(unique(c(chng_indexes, ident_indexes)))
+  start_indexes <- length(all_indexes)
+  indexes_remaining <- c(start_indexes, length(chng_indexes), length(ident_indexes),
+                         0, 0)
+  names(indexes_remaining) <- c("all_start", "all_mutants", "all_identicals",
+                                "post_read_filters", "post_pruning")
+
   if (is.numeric(min_position)) {
-    chng <- filter_min_position(chng, min_position=min_position, verbose=verbose)
+    filt <- filter_min_position(chng, min_position=min_position, verbose=verbose)
+    filtered["min_position"] <- filt[["removed"]]
+    reads_remaining["min_position"] <- filt[["remaining"]]
+    chng <- filt[["chng"]]
   }
   if (is.numeric(max_position)) {
-    chng <- filter_max_position(chng, max_position=max_position, verbose=verbose)
+    filt <- filter_max_position(chng, max_position=max_position, verbose=verbose)
+    filtered["max_position"] <- filt[["removed"]]
+    reads_remaining["max_position"] <- filt[["remaining"]]
+    chng <- filt[["chng"]]
   }
   if (isTRUE(prune_n)) {
-    chng <- filter_ns(chng, verbose=verbose)
+    filt <- filter_ns(chng, verbose=verbose)
+    filtered["prune_n"] <- filt[["removed"]]
+    reads_remaining["prune_n"] <- filt[["remaining"]]
+    chng <- filt[["chng"]]
   }
   if (is.numeric(max_mutations_per_read)) {
-    chng <- filter_max_mutations(chng, mutations_by_read,
+    filt <- filter_max_mutations(chng, mutations_by_read,
                                  max_mutations_per_read=max_mutations_per_read,
                                  verbose=verbose)
+    filtered["max_mutations_per_read"] <- filt[["removed"]]
+    reads_remaining["max_mutations_per_read"] <- filt[["remaining"]]
+    chng <- filt[["chng"]]
   }
 
   post_rows <- nrow(chng)
@@ -201,11 +159,9 @@ quantify_parsed <- function(changed=NULL, identical=NULL, min_reads=NULL,
   }
 
   ## Get some information about the numbers of indexes in the data.
-  if (verbose) {
-    message("All data: gathering information about the indexes observed, this is slow.")
-  }
   pruned <- prune_indexes(chng, ident, min_reads=min_reads, verbose=verbose)
-
+  indexes_remaining["post_read_filters"] <- pruned[["unfiltered_index_num"]]
+  indexes_remaining["post_pruning"] <- length(pruned[["kept_indexes"]])
   ## If it is not 'all', then we want to subset chng and ident accordingly.
   reads_per_index_summary <- pruned[["index_summary"]]
   wanted_indexes <- pruned[["kept_indexes"]]
@@ -215,6 +171,10 @@ quantify_parsed <- function(changed=NULL, identical=NULL, min_reads=NULL,
   }
   chng <- chng_ident[["chng"]]
   ident <- chng_ident[["ident"]]
+  filtered["mut_indexes"] <- chng_ident[["chng_removed"]]
+  filtered["ident_indexes"] <- chng_ident[["ident_removed"]]
+  reads_remaining["ident_index_pruned"] <- chng_ident[["ident_remaining"]]
+  reads_remaining["mut_index_pruned"] <- chng_ident[["chng_remaining"]]
 
   classifications <- classify_sequences(chng, ident, reads_per_index_summary,
                                         min_sequencer=min_sequencer, verbose=verbose)
@@ -231,6 +191,11 @@ quantify_parsed <- function(changed=NULL, identical=NULL, min_reads=NULL,
 
   retlist <- list(
     ## Big tables
+    "starting_chng_indexes" = starting_chng_indexes,
+    "starting_ident_indexes" = starting_ident_indexes,
+    "reads_filtered" = filtered,
+    "reads_remaining" = reads_remaining,
+    "indexes_remaining" = indexes_remaining,
     "mutations_by_read" = mutations_by_read,
     "changed_table" = all_changed,
     "ident_table" = all_identical,
@@ -258,13 +223,13 @@ quantify_parsed <- function(changed=NULL, identical=NULL, min_reads=NULL,
     "miss_indexes_by_position" = mutation_counts[["miss_indexes_by_position"]],
     "miss_sequencer_by_position" = mutation_counts[["miss_sequencer_by_position"]],
     ##   Nucleotide of the reference.
-    "miss_reads_by_ref_nt" = mutation_counts[["miss_reads_by_refnt"]],
-    "miss_indexes_by_ref_nt" = mutation_counts[["miss_indexes_by_refnt"]],
-    "miss_sequencer_by_ref_nt" = mutation_counts[["miss_sequencer_by_refnt"]],
+    "miss_reads_by_refnt" = mutation_counts[["miss_reads_by_refnt"]],
+    "miss_indexes_by_refnt" = mutation_counts[["miss_indexes_by_refnt"]],
+    "miss_sequencer_by_refnt" = mutation_counts[["miss_sequencer_by_refnt"]],
     ##   Nucleotide of the hit.
-    "miss_reads_by_hit_nt" = mutation_counts[["miss_reads_by_hitnt"]],
-    "miss_indexes_by_hit_nt" = mutation_counts[["miss_indexes_by_hitnt"]],
-    "miss_sequencer_by_hit_nt" = mutation_counts[["miss_sequencer_by_hitnt"]],
+    "miss_reads_by_hitnt" = mutation_counts[["miss_reads_by_hitnt"]],
+    "miss_indexes_by_hitnt" = mutation_counts[["miss_indexes_by_hitnt"]],
+    "miss_sequencer_by_hitnt" = mutation_counts[["miss_sequencer_by_hitnt"]],
     ##   Overall type of mutation.
     "miss_reads_by_type" = mutation_counts[["miss_reads_by_type"]],
     "miss_indexes_by_type" = mutation_counts[["miss_indexes_by_type"]],
@@ -293,100 +258,5 @@ quantify_parsed <- function(changed=NULL, identical=NULL, min_reads=NULL,
     "delete_reads_by_nt" = mutation_counts[["delete_reads_by_nt"]],
     "delete_indexes_by_nt" = mutation_counts[["delete_indexes_by_nt"]],
     "delete_sequencer_by_nt" = mutation_counts[["delete_sequencer_by_nt"]])
-  return(retlist)
-}
-
-matrices_from_tables <- function(tables, samples, verbose=FALSE) {
-  matrices <- list()
-  indexes_per_sample <- c()
-  reads_per_sample <- c()
-  for (t in tables) {
-    inc <- 0
-    col_names <- c()
-    if (verbose) {
-      message("Making a matrix of ", t, ".")
-    }
-    for (s in names(samples)) {
-      inc <- inc + 1
-      col_names <- c(col_names, s)
-      table <- samples[[s]][[t]]
-      last_col <- ncol(table)
-      column <- table[[last_col]]
-      if (is.null(matrices[[t]])) {
-        matrices[[t]] <- data.frame(row.names=table[[1]], s=column)
-      } else {
-        tmpdf <- data.frame(row.names=table[[1]], s=column)
-        matrices[[t]] <- merge(matrices[[t]], tmpdf, by="row.names", all=TRUE)
-        rownames(matrices[[t]]) <- matrices[[t]][["Row.names"]]
-        matrices[[t]][["Row.names"]] <- NULL
-      }
-      indexes_per_sample[s] <- samples[[s]][["filtered_index_count"]]
-      reads_per_sample[s] <- sum(samples[[s]][["changed_table"]][["all_reads"]]) +
-        sum(samples[[s]][["ident_table"]][["all_reads"]])
-    } ## End iterating over every sample name.
-    if (nrow(matrices[[t]]) > 0) {
-      colnames(matrices[[t]]) <- col_names
-      na_idx <- is.na(matrices[[t]])
-      matrices[[t]][na_idx] <- 0
-      numeric_rownames <- stringr::str_detect(string=rownames(matrices[[t]]),
-                                              pattern="[[:digit:]]")
-      if (sum(numeric_rownames) == length(numeric_rownames)) {
-        numeric_order <- suppressWarnings(order(as.numeric(rownames(matrices[[t]]))))
-        matrices[[t]] <- matrices[[t]][numeric_order, ]
-      }
-    }
-  }
-  retlist <- list(
-    "matrices" = matrices,
-    "indexes_per_sample" = indexes_per_sample,
-    "reads_per_sample" = reads_per_sample)
-  return(retlist)
-}
-
-normalize_matrices <- function(matrices, reads_per_sample, indexes_per_sample) {
-  ## I still need to figure out how I want to normalize these numbers.
-  normalized <- matrices
-  normalized_by_counts <- matrices
-  matrices_by_counts <- matrices
-  for (t in 1:length(names(normalized))) {
-    table_name <- names(normalized)[t]
-    if (nrow(matrices[[table_name]]) == 0) {
-      message("Skipping table: ", table_name)
-      next
-    }
-    read_table <- stringr::str_detect(string=table_name, pattern="reads")
-
-    ## For a few tables, the control sample is all 0s, so let us take that into account.
-    usable_columns <- colSums(normalized[[table_name]]) > 0
-    normalized[[table_name]] <- normalized[[table_name]][, usable_columns]
-    normalized_by_counts[[table_name]] <- normalized_by_counts[[table_name]][, usable_columns]
-
-    if (isTRUE(read_table)) {
-      normalized[[table_name]] <- try(edgeR::cpm(y=as.matrix(normalized[[table_name]]),
-                                                 lib.sizes=reads_per_sample), silent=TRUE)
-      matrices_by_counts[[table_name]] <- matrices_by_counts[[table_name]] / reads_per_sample
-    } else {
-      normalized[[table_name]] <- try(edgeR::cpm(y=as.matrix(normalized[[table_name]]),
-                                                 lib.sizes=indexes_per_sample), silent=TRUE)
-      matrices_by_counts[[table_name]] <- matrices_by_counts[[table_name]] / indexes_per_sample
-    }
-    if (class(normalized[[table_name]]) == "try-error") {
-      message("Normalization failed for table: ", table_name, ", leaving it alone.")
-      normalized[[table_name]] <- matrices[[table_name]]
-    } else {
-      if (isTRUE(read_table)) {
-        normalized_by_counts[[table_name]] <- normalized[[table_name]] /
-          reads_per_sample[usable_columns]
-      } else {
-        normalized_by_counts[[table_name]] <- normalized[[table_name]] /
-          indexes_per_sample[usable_columns]
-      }
-    }
-  }
-
-  retlist <- list(
-    "normalized" = normalized,
-    "normalized_by_counts" = normalized_by_counts,
-    "matrices_by_counts" = matrices_by_counts)
   return(retlist)
 }

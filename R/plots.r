@@ -9,50 +9,87 @@
 #' @export
 barplot_matrices <- function(summary) {
   matrices <- summary[["matrices"]]
-  normalized <- summary[["normalized"]]
-  mc <- summary[["matrices_by_counts"]]
-  nc <- summary[["normalized_by_counts"]]
+  matrices_cpm <- summary[["matrices_cpm"]]
+  matrices_cpmlength <- summary[["matrices_cpmlength"]]
+  matrices_counts <- summary[["matrices_counts"]]
+  matrices_countslength <- summary[["matrices_countslength"]]
   matrix_plots <- list()
-  normal_plots <- list()
-  matrix_count_plots <- list()
-  normal_count_plots <- list()
+  cpm_plots <- list()
+  cpmlength_plots <- list()
+  counts_plots <- list()
+  countslength_plots <- list()
   for (t in 1:length(names(matrices))) {
        tname <- names(matrices)[t]
        matrix <- as.matrix(matrices[[tname]])
-       normal <- as.matrix(normalized[[tname]])
-       m <- as.matrix(mc[[tname]])
-       n <- as.matrix(nc[[tname]])
        matrix_melted <- reshape2::melt(data=matrix, value.name="norm")
        colnames(matrix_melted) <- c("position","sample", "number")
-       normal_melted <- reshape2::melt(data=normal, value.name="norm")
-       colnames(normal_melted) <- c("position","sample", "norm")
-       mm <- reshape2::melt(data=m, value.name="norm")
-       colnames(mm) <- c("position","sample", "norm")
-       nm <- reshape2::melt(data=n, value.name="norm")
-       colnames(nm) <- c("position","sample", "norm")
+       matrix_plots[[tname]] <- ggplot(
+         data=matrix_melted,
+         mapping=ggplot2::aes_string(x="position", y="number", fill="sample")) +
+         ggplot2::geom_col(position="dodge") +
+         ggplot2::theme_bw()
 
-       matrix_plots[[tname]] <- ggplot2::ggplot(data=matrix_melted,
-                                                mapping=ggplot2::aes_string(x="position", y="number", fill="sample")) +
+       mcpm <- as.matrix(matrices_cpm[[tname]])
+       mcpm_melted <- reshape2::melt(data=mcpm, value.name="norm")
+       colnames(mcpm_melted) <- c("position","sample", "number")
+       cpm_plots[[tname]] <- ggplot(
+         data=mcpm_melted,
+         mapping=ggplot2::aes_string(x="position", y="number", fill="sample")) +
          ggplot2::geom_col(position="dodge") +
          ggplot2::theme_bw()
-       normal_plots[[tname]] <- ggplot2::ggplot(data=normal_melted,
-                                                mapping=ggplot2::aes_string(x="position", y="norm", fill="sample")) +
+
+       mcpml <- as.matrix(matrices_cpmlength[[tname]])
+       mcpml_melted <- reshape2::melt(data=mcpml, value.name="norm")
+       colnames(mcpml_melted) <- c("position","sample", "number")
+       cpmlength_plots[[tname]] <- ggplot(
+         data=mcpml_melted,
+         mapping=ggplot2::aes_string(x="position", y="number", fill="sample")) +
          ggplot2::geom_col(position="dodge") +
          ggplot2::theme_bw()
-       matrix_count_plots[[tname]] <- ggplot2::ggplot(data=mm,
-                                                      mapping=ggplot2::aes_string(x="position", y="norm", fill="sample")) +
+
+       mcount <- as.matrix(matrices_counts[[tname]])
+       mcount_melted <- reshape2::melt(data=mcount, value.name="norm")
+       colnames(mcount_melted) <- c("position","sample", "number")
+       counts_plots[[tname]] <- ggplot(
+         data=mcount_melted,
+         mapping=ggplot2::aes_string(x="position", y="number", fill="sample")) +
          ggplot2::geom_col(position="dodge") +
          ggplot2::theme_bw()
-       normal_count_plots[[tname]] <- ggplot2::ggplot(data=nm,
-                                                mapping=ggplot2::aes_string(x="position", y="norm", fill="sample")) +
+
+       mcountl <- as.matrix(matrices_countslength[[tname]])
+       mcountl_melted <- reshape2::melt(data=mcountl, value.name="norm")
+       colnames(mcountl_melted) <- c("position","sample", "number")
+       countslength_plots[[tname]] <- ggplot(
+         data=mcountl_melted,
+         mapping=ggplot2::aes_string(x="position", y="number", fill="sample")) +
          ggplot2::geom_col(position="dodge") +
          ggplot2::theme_bw()
   }
   retlist <- list(
     "matrices" = matrix_plots,
-    "normal" = normal_plots,
-    "matrix_count" = matrix_count_plots,
-    "normal_count" = normal_count_plots
-  )
+    "cpm" = cpm_plots,
+    "cpmlength" = cpmlength_plots,
+    "counts" = counts_plots,
+    "countslength" = countslength_plots)
   return(retlist)
+}
+
+#' Make a density plot of how many indexes are associated with each sample.
+#'
+#' @param df Table of indexes/sample.
+#' @param max Maximum number of indexes to plot.
+#' @return Density plot!
+#' @export
+plot_index_density <- function(df, max=20) {
+  df[["sample"]] <- as.factor(df[["sample"]])
+  df_count <- df %>%
+    group_by(sample, index) %>%
+    summarise(index_count=n())
+  plt <- ggplot2::ggplot(data=df_count,
+                         mapping=ggplot2::aes_string(x="index_count",
+                                                     alpha=0.4,
+                                                     fill="sample")) +
+    ggplot2::geom_density(adjust=4) +
+    ggplot2::xlim(c(1, max))
+  return(plt)
 }

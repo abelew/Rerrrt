@@ -1,3 +1,24 @@
+#' Given a set of sequences containing mutations and identical reads along with
+#' a summary of how many reads/index are identical/mutant, classify them as
+#' identical indexes, RT indexes, or sequencer indexes.
+#'
+#' The reads_per_index_summary provides a table of the number of mutant and
+#' identical reads associated with every index in the data.  Identical reads are
+#' (obviously) ones with 0 mutations.  Sequencer index/reads are when there is 1
+#' mutant out of n reads for an index.  RT index/reads are when all reads for an
+#' index are mutant.
+#'
+#' @param chng Set of reads with mutants.
+#' @param ident Set of reads which are identical.
+#' @param reads_per_index_summary Table containing how many reads/index are
+#'   identical/mutant.
+#' @param min_sequencer Define how stringent one must be to deem a given
+#'   read/index group as a sequencer-based error.  Too small and gets too many
+#'   false positives, too large and one gets insufficient data to play with.
+#' @param verbose Print some information while running.
+#' @return Groups of reads which are RT, identical, and sequencer; along with
+#'   summary information.
+#' @export
 classify_sequences <- function(chng, ident, reads_per_index_summary,
                                min_sequencer=10, verbose=verbose) {
   ## We can merge the information from prune_indexes() to the changed and
@@ -51,6 +72,14 @@ classify_sequences <- function(chng, ident, reads_per_index_summary,
   return(retlist)
 }
 
+#' Count up how many reads are on the forward and reverse strands.
+#'
+#' @param identical Set of reads identical to the template.
+#' @param changed Reads deemed to be from the RT.
+#' @param sequencer Reads deemed to be from the sequencer.
+#' @param verbose Print some information while running.
+#' @return List of how many forward and reverse reads are in the data.
+#' @export
 count_mutation_direction <- function(identical, changed, sequencer, verbose=FALSE) {
   ident_by_direction <- identical %>%
     group_by(direction) %>%
@@ -83,13 +112,25 @@ count_mutation_direction <- function(identical, changed, sequencer, verbose=FALS
   return(retlist)
 }
 
-count_mutation_types <- function(only_mutants, strict_sequencer,
+#' Count up all sorts of fun mutation types in the data!
+#'
+#' This is my favorite function in this!  It counts up all sorts of fun mutation
+#' types in the data and gives back tables of the results.
+#'
+#' @param strict_rt Indexes from RT errors.
+#' @param strict_equencer Indexes from sequencer errors.
+#' @param min_indexes The minimum number of indexes required to deem a given
+#'   error as 'real'.
+#' @param verbose Print some information about the run.
+#' @return Tables of the various mutation types.
+#' @export
+count_mutation_types <- function(strict_rt, strict_sequencer,
                                  min_indexes=3, verbose=FALSE) {
 
   ## Pull out the number of indexes for each position, type, reference, hit.
   ## We can use this to subset only those mutations with >= x indexes.
   ##  Counting by string.
-  num_indexes_by_string <- only_mutants %>%
+  num_indexes_by_string <- strict_rt %>%
     group_by(string, position, type, reference, hit, mt,
              transition_transversion, strong_weak) %>%
     summarise("index_count" = n())
@@ -109,7 +150,7 @@ count_mutation_types <- function(only_mutants, strict_sequencer,
 
   ## Get information by position in the template
   ##  Counting by reference position.
-  miss_reads_by_position <- only_mutants %>%
+  miss_reads_by_position <- strict_rt %>%
     filter(type == "mis") %>%
     group_by(position, reference) %>%
     summarise("position_count" = sum(all_reads))
@@ -129,7 +170,7 @@ count_mutation_types <- function(only_mutants, strict_sequencer,
     summarise("ref_nt" = n())
 
   ## Count mutations by identity.
-  miss_reads_by_string <- only_mutants %>%
+  miss_reads_by_string <- strict_rt %>%
     filter(type == "mis") %>%
     group_by(string) %>%
     summarise("string_count" = sum(all_reads))
@@ -143,7 +184,7 @@ count_mutation_types <- function(only_mutants, strict_sequencer,
     summarise("string_count" = sum(index_count))
 
   ## Count mutations by template nucleotide.
-  miss_reads_by_refnt <- only_mutants %>%
+  miss_reads_by_refnt <- strict_rt %>%
     filter(type == "mis") %>%
     group_by(reference) %>%
     summarise("nt_count" = sum(all_reads))
@@ -157,7 +198,7 @@ count_mutation_types <- function(only_mutants, strict_sequencer,
     summarise("nt_count" = sum(index_count))
 
   ## Count mutations by hit nucleotide.
-  miss_reads_by_hitnt <- only_mutants %>%
+  miss_reads_by_hitnt <- strict_rt %>%
     filter(type == "mis") %>%
     group_by(hit) %>%
     summarise("nt_count" = sum(all_reads))
@@ -171,7 +212,7 @@ count_mutation_types <- function(only_mutants, strict_sequencer,
     summarise("nt_count" = sum(index_count))
 
   ## Count mutations by overall type A->G, G->A, etc.
-  miss_reads_by_type <- only_mutants %>%
+  miss_reads_by_type <- strict_rt %>%
     filter(type == "mis") %>%
     group_by(mt) %>%
     summarise("mt_count" = sum(all_reads))
@@ -185,7 +226,7 @@ count_mutation_types <- function(only_mutants, strict_sequencer,
     summarise("mt_count" = sum(index_count))
 
   ## Count transitions/transversions
-  miss_reads_by_trans <- only_mutants %>%
+  miss_reads_by_trans <- strict_rt %>%
     filter(type == "mis") %>%
     group_by(transition_transversion) %>%
     summarise("trans_count" = sum(all_reads))
@@ -199,7 +240,7 @@ count_mutation_types <- function(only_mutants, strict_sequencer,
     summarise("trans_count" = sum(index_count))
 
   ## Strong/weak
-  miss_reads_by_strength <- only_mutants %>%
+  miss_reads_by_strength <- strict_rt %>%
     filter(type == "mis") %>%
     group_by(strong_weak) %>%
     summarise("strength_count" = sum(all_reads))
@@ -213,7 +254,7 @@ count_mutation_types <- function(only_mutants, strict_sequencer,
     summarise("strength_count" = sum(index_count))
 
   ## Insertions by position
-  insert_reads_by_position <- only_mutants %>%
+  insert_reads_by_position <- strict_rt %>%
     filter(type == "ins") %>%
     group_by(position) %>%
     summarise("position_count" = sum(all_reads))
@@ -227,7 +268,7 @@ count_mutation_types <- function(only_mutants, strict_sequencer,
     summarise("position_count" = sum(index_count))
 
   ## Inserts by reference nucleotide
-  insert_reads_by_nt <- only_mutants %>%
+  insert_reads_by_nt <- strict_rt %>%
     filter(type == "ins") %>%
     group_by(hit) %>%
     summarise("insert_count" = sum(all_reads))
@@ -241,7 +282,7 @@ count_mutation_types <- function(only_mutants, strict_sequencer,
     summarise("insert_count" = sum(index_count))
 
   ## Deletions by position.
-  delete_reads_by_position <- only_mutants %>%
+  delete_reads_by_position <- strict_rt %>%
     filter(type == "del") %>%
     group_by(position) %>%
     summarise("del_count" = sum(all_reads))
@@ -255,7 +296,7 @@ count_mutation_types <- function(only_mutants, strict_sequencer,
     summarise("position_count" = sum(index_count))
 
   ## Deletions by nucleotide.
-  delete_reads_by_nt <- only_mutants %>%
+  delete_reads_by_nt <- strict_rt %>%
     filter(type == "del") %>%
     group_by(reference) %>%
     summarise("del_count" = sum(all_reads))
@@ -282,13 +323,13 @@ count_mutation_types <- function(only_mutants, strict_sequencer,
     "miss_indexes_by_position" = miss_indexes_by_position,
     "miss_sequencer_by_position" = miss_sequencer_by_position,
     ##   Nucleotide of the reference.
-    "miss_reads_by_ref_nt" = miss_reads_by_refnt,
-    "miss_indexes_by_ref_nt" = miss_indexes_by_refnt,
-    "miss_sequencer_by_ref_nt" = miss_sequencer_by_refnt,
+    "miss_reads_by_refnt" = miss_reads_by_refnt,
+    "miss_indexes_by_refnt" = miss_indexes_by_refnt,
+    "miss_sequencer_by_refnt" = miss_sequencer_by_refnt,
     ##   Nucleotide of the hit.
-    "miss_reads_by_hit_nt" = miss_reads_by_hitnt,
-    "miss_indexes_by_hit_nt" = miss_indexes_by_hitnt,
-    "miss_sequencer_by_hit_nt" = miss_sequencer_by_hitnt,
+    "miss_reads_by_hitnt" = miss_reads_by_hitnt,
+    "miss_indexes_by_hitnt" = miss_indexes_by_hitnt,
+    "miss_sequencer_by_hitnt" = miss_sequencer_by_hitnt,
     ##   Overall type of mutation.
     "miss_reads_by_type" = miss_reads_by_type,
     "miss_indexes_by_type" = miss_indexes_by_type,

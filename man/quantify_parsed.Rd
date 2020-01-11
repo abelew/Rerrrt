@@ -12,6 +12,8 @@ quantify_parsed(
   min_sequencer = 10,
   prune_n = TRUE,
   min_position = 24,
+  max_position = 176,
+  max_mutations_per_read = NULL,
   verbose = TRUE
 )
 }
@@ -34,6 +36,8 @@ associated with a sequencer-based error.}
 \item{prune_n}{Remove mutations of a base to 'N'?}
 
 \item{min_position}{Filter mutations before this position?}
+
+\item{max_position}{Filter mutations after this position?}
 
 \item{verbose}{Print information describing what is happening while this runs.}
 }
