@@ -14,12 +14,12 @@ count_mutation_types(
 \arguments{
 \item{strict_rt}{Indexes from RT errors.}
 
+\item{strict_sequencer}{Indexes from sequencer errors.}
+
 \item{min_indexes}{The minimum number of indexes required to deem a given
 error as 'real'.}
 
 \item{verbose}{Print some information about the run.}
-
-\item{strict_equencer}{Indexes from sequencer errors.}
 }
 \value{
 Tables of the various mutation types.

@@ -57,46 +57,65 @@ expand_mutation_string <- function(t) {
 #' some sense of it.
 #'
 #' @param changed File containing the set of changed reads/indexes, by default
-#'   named 'step4.txt.xz' by errrt.pm.
+#'  named 'step4.txt.xz' by errrt.pm.
 #' @param identical File containing the set of identical reads/indexes, by
-#'   default named 'step2_identical_reads.txt.xz' by errrt.pm.
+#'  default named 'step2_identical_reads.txt.xz' by errrt.pm.
 #' @param min_reads Minimum number of reads for each index required to include
-#'   each index in the final result.
+#'  each index in the final result.
 #' @param min_indexes Minimum number of indexes required to include a given
-#'   mutation in the final result.
+#'  mutation in the final result.
 #' @param min_sequencer Minimum number of total reads to consider an index as
-#'   associated with a sequencer-based error.
+#'  associated with a sequencer-based error.
 #' @param prune_n Remove mutations of a base to 'N'?
 #' @param min_position Filter mutations before this position?
 #' @param max_position Filter mutations after this position?
+#' @param max_mutations_per_read If a read has more than this number of mutations, drop it.
+#' @param reencode Rewrite the indexes on a different scale to save memory (6 bit instead of 2)
 #' @param verbose Print information describing what is happening while this runs.
 #' @return List containing a bunch of summary information about the data.
 #' @export
 quantify_parsed <- function(changed=NULL, identical=NULL, min_reads=NULL,
                             min_indexes=NULL, min_sequencer=10, prune_n=TRUE,
                             min_position=24, max_position=176,
-                            max_mutations_per_read=NULL, verbose=TRUE) {
+                            max_mutations_per_read=NULL, reencode=FALSE,
+                            verbose=TRUE) {
   if (verbose) {
-    message("Reading the file containing mutations: ", changed)
+    message("  Reading the file containing mutations: ", changed)
   }
   chng <- readr::read_tsv(changed,
                           ##col_names=c("readid", "index", "direciton"
                           ##            "position", "type", "ref", "hit"))
                           col_types=c("ncfnccc"), col_names=TRUE)
   if (verbose) {
-    message("Reading the file containing the identical reads: ", identical)
+    message("  Reading the file containing the identical reads: ", identical)
   }
   ident <- readr::read_tsv(identical,
-                           col_types=c("ncc"),
-                           col_names=c("readid", "direction", "index"))
-  chng <- data.table::as.data.table(chng)
-  ident <- data.table::as.data.table(ident)
+                           col_types=c("ncc"), col_names=TRUE)
+  ## Check for tables which were written before I added column names.
+  if (colnames(ident)[1] == "1") {
+    ident <- rbind(colnames(ident), ident)
+    colnames(ident) <- c("read_num", "direction", "index")
+  }
+
+  ## This was an effort to lower the memory usage.
+  ## It did work, but takes significant time.
+  ## Changes in how I count indexes saved much more memory and so I think this is not needed.
+  if (isTRUE(reencode)) {
+    message("Re-encoding indexes.")
+    index <- NULL
+    chng <- data.table::as.data.table(chng)
+    chng[, "index" := dna_to_6bit(index), by="index"]
+    ident <- data.table::as.data.table(ident)
+    ident[, "index" := dna_to_6bit(index), by="index"]
+  }
   start_rows <- nrow(chng)
   end_rows <- start_rows
 
   starting_chng_indexes <- chng[["index"]]
   starting_ident_indexes <- ident[["index"]]
 
+  ## go away r cmd check
+  readid <- NULL
   mutations_by_read <- chng %>%
     group_by(readid) %>%
     summarise("read_mutants" = n())
@@ -111,7 +130,7 @@ quantify_parsed <- function(changed=NULL, identical=NULL, min_reads=NULL,
                               "ident_index_pruned", "mut_index_pruned")
 
   if (verbose) {
-    message("Counting indexes before filtering.")
+    message("  Counting indexes before filtering.")
   }
   chng_indexes <- sort(unique(chng[["index"]]))
   ident_indexes <- sort(unique(ident[["index"]]))
@@ -140,6 +159,15 @@ quantify_parsed <- function(changed=NULL, identical=NULL, min_reads=NULL,
     reads_remaining["prune_n"] <- filt[["remaining"]]
     chng <- filt[["chng"]]
   }
+
+  min_proportion <- FALSE
+  if (is.numeric(min_proportion)) {
+    filt <- filter_proportion(chng, ident, min_proportion=min_proportion, verbose=verbose)
+    filtered["proportion_mutant"] <- filt[["removed"]]
+    reads_remaining["proportion_mutant"] <- filt[["remaining"]]
+    chng <- filt[["chng"]]
+  }
+
   if (is.numeric(max_mutations_per_read)) {
     filt <- filter_max_mutations(chng, mutations_by_read,
                                  max_mutations_per_read=max_mutations_per_read,
@@ -154,9 +182,10 @@ quantify_parsed <- function(changed=NULL, identical=NULL, min_reads=NULL,
   pct_removed <- 1 - (post_rows / start_rows)
   sum_pct <- scales::percent(x=pct_removed, accuracy=0.01)
   if (verbose) {
-    message("Mutation data: all filters removed ",
+    message("  Mutation data: all filters removed ",
             sum_removed, " reads, or ", sum_pct, ".")
   }
+
 
   ## Get some information about the numbers of indexes in the data.
   pruned <- prune_indexes(chng, ident, min_reads=min_reads, verbose=verbose)

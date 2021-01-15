@@ -11,10 +11,10 @@
 #' @param chng Set of reads with mutants.
 #' @param ident Set of reads which are identical.
 #' @param reads_per_index_summary Table containing how many reads/index are
-#'   identical/mutant.
+#'  identical/mutant.
 #' @param min_sequencer Define how stringent one must be to deem a given
-#'   read/index group as a sequencer-based error.  Too small and gets too many
-#'   false positives, too large and one gets insufficient data to play with.
+#'  read/index group as a sequencer-based error.  Too small and gets too many
+#'  false positives, too large and one gets insufficient data to play with.
 #' @param verbose Print some information while running.
 #' @return Groups of reads which are RT, identical, and sequencer; along with
 #'   summary information.
@@ -48,6 +48,13 @@ classify_sequences <- function(chng, ident, reads_per_index_summary,
     chng_with_summary[["all_reads"]] >= min_sequencer
   strict_sequencer <- chng_with_summary[strict_sequencer_idx, ]
 
+  ## I was thinking to potentially quantify the reads which are neither
+  ## deemed RT nor sequencer.
+  ## uncharacterized_idx <- !only_mutant_idx
+  ## uncharacterized_mutants <- chng_with_summary[uncharacterized_idx, ]
+  ## uncharacterized_idx <- chng_with_summary[["mut_reads"]] != 1
+  ## uncharacterized_mutants <- chng_with_summary[uncharacterized_idx, ]
+
   all_changed <- expand_mutation_string(chng_with_summary)
   strict_sequencer <- expand_mutation_string(strict_sequencer)
   rt_mutants <- expand_mutation_string(rt_mutants)
@@ -60,7 +67,7 @@ classify_sequences <- function(chng, ident, reads_per_index_summary,
     message("After classification, there are ",
             nrow(strict_sequencer), " reads/indexes which are strictly sequencer.")
     message("After classification, there are ",
-            nrow(rt_mutants), " reads/indexes which are deemed from reverse transcriptase.")
+            nrow(rt_mutants), " reads/indexes which are consistently repeated.")
   }
 
   retlist <- list(
@@ -81,6 +88,8 @@ classify_sequences <- function(chng, ident, reads_per_index_summary,
 #' @return List of how many forward and reverse reads are in the data.
 #' @export
 count_mutation_direction <- function(identical, changed, sequencer, verbose=FALSE) {
+  ## Suck it, R CMD CHECK
+  direction <- ident_reads <- mut_reads <- NULL
   ident_by_direction <- identical %>%
     group_by(direction) %>%
     summarise("dir_reads" = sum(ident_reads))
@@ -118,9 +127,9 @@ count_mutation_direction <- function(identical, changed, sequencer, verbose=FALS
 #' types in the data and gives back tables of the results.
 #'
 #' @param strict_rt Indexes from RT errors.
-#' @param strict_equencer Indexes from sequencer errors.
+#' @param strict_sequencer Indexes from sequencer errors.
 #' @param min_indexes The minimum number of indexes required to deem a given
-#'   error as 'real'.
+#'  error as 'real'.
 #' @param verbose Print some information about the run.
 #' @return Tables of the various mutation types.
 #' @export
@@ -130,6 +139,9 @@ count_mutation_types <- function(strict_rt, strict_sequencer,
   ## Pull out the number of indexes for each position, type, reference, hit.
   ## We can use this to subset only those mutations with >= x indexes.
   ##  Counting by string.
+
+  ## Suck it r cmd check
+  string <- position <- type <- reference <- hit <- mt <- transition_transversion <- strong_weak <- NULL
   num_indexes_by_string <- strict_rt %>%
     group_by(string, position, type, reference, hit, mt,
              transition_transversion, strong_weak) %>%
@@ -150,6 +162,7 @@ count_mutation_types <- function(strict_rt, strict_sequencer,
 
   ## Get information by position in the template
   ##  Counting by reference position.
+  all_reads <- index_count <- NULL
   miss_reads_by_position <- strict_rt %>%
     filter(type == "mis") %>%
     group_by(position, reference) %>%

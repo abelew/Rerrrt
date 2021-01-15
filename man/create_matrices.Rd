@@ -17,7 +17,11 @@ create_matrices(
   max_mutations_per_read = NULL,
   prune_n = TRUE,
   excel = NULL,
-  verbose = TRUE
+  verbose = TRUE,
+  plot_order = c("dna_control", "dna_low", "dna_high", "rna_control", "rna_low",
+    "rna_high"),
+  savefile = "sample_tables.rda",
+  overwrite = FALSE
 )
 }
 \arguments{
@@ -39,9 +43,21 @@ for sequencer-based mutations.}
 \item{min_position}{Filter against weird data at the beginning of the
 template.}
 
+\item{max_position}{Filter against weird data at the end.}
+
+\item{max_mutations_per_read}{Drop reads with more than this number of mutations.}
+
 \item{prune_n}{Remove mutations which are something to N.}
 
+\item{excel}{Save data to this file.}
+
 \item{verbose}{Print information about the running of this function?}
+
+\item{plot_order}{When plotting, force the order to this.}
+
+\item{savefile}{Save the timeconsuming portion to this file.}
+
+\item{overwrite}{If the savefile exists, overwrite it?}
 }
 \value{
 List with lots of matrices of the resulting data.

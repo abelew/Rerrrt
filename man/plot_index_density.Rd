@@ -4,12 +4,14 @@
 \alias{plot_index_density}
 \title{Make a density plot of how many indexes are associated with each sample.}
 \usage{
-plot_index_density(df, max = 20)
+plot_index_density(data, metadata, title = "")
 }
 \arguments{
-\item{df}{Table of indexes/sample.}
+\item{data}{Table of indexes/sample.}
 
-\item{max}{Maximum number of indexes to plot.}
+\item{metadata}{Experiment metadata, used to acquire colors.}
+
+\item{title}{Plot title.}
 }
 \value{
 Density plot!

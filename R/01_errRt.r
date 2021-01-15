@@ -21,12 +21,17 @@ NULL
 
 #' errRt: Some functions for analyzing sequencing data intended to quantify RT error rates.
 #'
+#' This package (along with its perl counterpart) attempts to make it easier to
+#' analyze high-throughput experiments which quantify error rates by using a
+#' sample metadata worksheet to automate the filtering, classification, and
+#' counting of errors in the sequencing data of a known template.
+#'
 #' @docType package
 #' @name errRt
-#' @importFrom data.table data.table
-#' @importFrom dplyr filter group_by n summarise
-#' @importFrom ggplot2 aes aes_string ggplot
-#' @importFrom glue glue glue_data
 #' @import methods
+#' @import data.table
+#' @import glue
+#' @import ggplot2
+#' @import dplyr
 #' @import utils
 NULL

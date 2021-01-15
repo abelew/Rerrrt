@@ -18,7 +18,7 @@ prune_indexes(chng, ident, min_reads = 3, verbose = TRUE)
 }
 \value{
 List with the summary of the numbers of reads observed and the
-  indexes kept.  The list of indexes kept may just be 'all'.
+ indexes kept.  The list of indexes kept may just be 'all'.
 }
 \description{
 This should provide a table of how many reads/index are (a)identical, (b)contain

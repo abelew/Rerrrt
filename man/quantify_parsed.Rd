@@ -14,6 +14,7 @@ quantify_parsed(
   min_position = 24,
   max_position = 176,
   max_mutations_per_read = NULL,
+  reencode = FALSE,
   verbose = TRUE
 )
 }
@@ -38,6 +39,10 @@ associated with a sequencer-based error.}
 \item{min_position}{Filter mutations before this position?}
 
 \item{max_position}{Filter mutations after this position?}
+
+\item{max_mutations_per_read}{If a read has more than this number of mutations, drop it.}
+
+\item{reencode}{Rewrite the indexes on a different scale to save memory (6 bit instead of 2)}
 
 \item{verbose}{Print information describing what is happening while this runs.}
 }

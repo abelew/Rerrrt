@@ -6,7 +6,7 @@
 #' mutant.  My hope is that this will avoid false positives, but it will also
 #' limit the perceived sequencer error rate.
 #'
-#' @param summary Result from create_matrices().
+#' @param data_summary Result from create_matrices().
 #' @return Estimate of errors/nucleotide deemed to originate from the sequencer.
 #' @export
 sequencer_error <- function(data_summary) {

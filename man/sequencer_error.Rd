@@ -7,7 +7,7 @@
 sequencer_error(data_summary)
 }
 \arguments{
-\item{summary}{Result from create_matrices().}
+\item{data_summary}{Result from create_matrices().}
 }
 \value{
 Estimate of errors/nucleotide deemed to originate from the sequencer.

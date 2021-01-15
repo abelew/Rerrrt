@@ -16,9 +16,9 @@ filter_max_mutations(
 
 \item{mutation_df}{Data frame of readids and their number of mutations.}
 
-\item{verbose}{Print some information while running?}
+\item{max_mutations_per_read}{What it says on the tin.}
 
-\item{max_mutations_per_reads}{What it says on the tin.}
+\item{verbose}{Print some information while running?}
 }
 \value{
 The remaining reads and a little summary information.

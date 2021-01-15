@@ -5,5 +5,8 @@
 \alias{errRt}
 \title{errRt: Some functions for analyzing sequencing data intended to quantify RT error rates.}
 \description{
-errRt: Some functions for analyzing sequencing data intended to quantify RT error rates.
+This package (along with its perl counterpart) attempts to make it easier to
+analyze high-throughput experiments which quantify error rates by using a
+sample metadata worksheet to automate the filtering, classification, and
+counting of errors in the sequencing data of a known template.
 }

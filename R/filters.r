@@ -12,9 +12,9 @@ filter_min_position <- function(chng, min_position=24, verbose=FALSE) {
   pre_rows <- nrow(chng)
   post_rows <- pre_rows
   if (verbose) {
-    message("Mutation data: removing any differences before position: ",
+    message("   Mutation data: removing any differences before position: ",
             min_position, ".")
-    message("Mutation data: before pruning, there are: ", pre_rows, " reads.")
+    message("   Mutation data: before pruning, there are: ", pre_rows, " reads.")
   }
   min_idx <- chng[["position"]] >= min_position
   chng <- chng[min_idx, ]
@@ -23,7 +23,7 @@ filter_min_position <- function(chng, min_position=24, verbose=FALSE) {
   delta <- pre_rows - post_rows
   pct_diff <- scales::percent(x=pct, accuracy=0.01)
   if (verbose) {
-    message("Mutation data: after min-position pruning, there are: ",
+    message("   Mutation data: after min-position pruning, there are: ",
             post_rows, " reads: ", delta, " lost or ", pct_diff, ".")
   }
   retlist <- list(
@@ -48,9 +48,9 @@ filter_max_position <- function(chng, max_position=176, verbose=FALSE) {
   pre_rows <- nrow(chng)
   post_rows <- pre_rows
   if (verbose) {
-    message("Mutation data: removing any differences after position: ",
+    message("   Mutation data: removing any differences after position: ",
             max_position, ".")
-    message("Mutation data: before pruning, there are: ", pre_rows, " reads.")
+    message("   Mutation data: before pruning, there are: ", pre_rows, " reads.")
   }
   min_idx <- chng[["position"]] <= max_position
   chng <- chng[min_idx, ]
@@ -59,7 +59,7 @@ filter_max_position <- function(chng, max_position=176, verbose=FALSE) {
   delta <- pre_rows - post_rows
   pct_diff <- scales::percent(x=pct, accuracy=0.01)
   if (verbose) {
-    message("Mutation data: after max-position pruning, there are: ",
+    message("   Mutation data: after max-position pruning, there are: ",
             post_rows, " reads: ", delta, " lost or ", pct_diff, ".")
   }
   retlist <- list(
@@ -82,14 +82,14 @@ filter_max_position <- function(chng, max_position=176, verbose=FALSE) {
 filter_ns <- function(chng, verbose=FALSE) {
   pre_rows <- nrow(chng)
   if (verbose) {
-    message("Mutation data: removing any reads with 'N' as the hit.")
+    message("   Mutation data: removing any reads with 'N' as the hit.")
     n_idx <- chng[["hit"]] != "N"
     chng <- chng[n_idx, ]
     post_rows <- nrow(chng)
     pct <- 1 - (post_rows / pre_rows)
     delta <- pre_rows - post_rows
     pct_diff <- scales::percent(x=pct, accuracy=0.01)
-    message("Mutation data: after N pruning, there are: ",
+    message("   Mutation data: after N pruning, there are: ",
             post_rows, " reads: ", delta, " lost or ", pct_diff, ".")
   }
   retlist <- list(
@@ -109,14 +109,14 @@ filter_ns <- function(chng, verbose=FALSE) {
 #'
 #' @param chng Data set of reads which are not identical to the template.
 #' @param mutation_df Data frame of readids and their number of mutations.
-#' @param max_mutations_per_reads What it says on the tin.
+#' @param max_mutations_per_read What it says on the tin.
 #' @param verbose Print some information while running?
 #' @return The remaining reads and a little summary information.
 #' @export
 filter_max_mutations <- function(chng, mutation_df,
                                  max_mutations_per_read=10, verbose=FALSE) {
   pre_rows <- nrow(chng)
-  message("Mutation data: removing reads with greater than ",
+  message("   Mutation data: removing reads with greater than ",
           max_mutations_per_read, " mutations.")
   excluded_readid_idx <- mutation_df[["read_mutants"]] > max_mutations_per_read
   excluded_readids <- mutation_df[excluded_readid_idx, "readid"][["readid"]]
@@ -126,7 +126,7 @@ filter_max_mutations <- function(chng, mutation_df,
   pct <- 1 - (post_rows / pre_rows)
   delta <- pre_rows - post_rows
   pct_diff <- scales::percent(x=pct, accuracy=0.01)
-  message("Mutation data: after max_mutation pruning, there are: ",
+  message("   Mutation data: after max_mutation pruning, there are: ",
           post_rows, " reads: ", delta, " lost or ", pct_diff, ".")
   retlist <- list(
     "start" = pre_rows,
@@ -134,6 +134,59 @@ filter_max_mutations <- function(chng, mutation_df,
     "remaining" = post_rows,
     "chng" = chng)
   return(retlist)
+}
+
+#' Filter out thing which are of an insufficient proportion.
+#'
+#' This is not currently used, but was something I wanted to consider.
+#'
+#' @param chng Table of changed reads.
+#' @param ident Table of identical reads.
+#' @param min_proportion Minimum proportion of changed/identical reads/index.
+#' @param verbose Print while running.
+filter_proportion <- function(chng, ident, min_proportion=0.5, verbose=FALSE) {
+  pre_rows <- nrow(chng)
+  pre_ident <- nrow(ident)
+  if (verbose) {
+    message("All data: removing indexes with less than ", min_proportion, " mutant/identical reads/index.")
+    message("All data: before proportion filtering, there are: ", pre_rows, " changed reads.")
+    message("All data: before proportion filtering, there are: ", pre_ident, " identical reads.")
+  }
+
+  chng_table <- table(chng[["index"]])
+  gt_zero <- ident[["index"]] %in% names(chng_table)
+  ident_subset <- ident[gt_zero, "index"]
+  ident_table <- table(ident_subset)
+  chng_table_dt <- data.table::as.data.table(chng_table)
+  colnames(chng_table_dt) <- c("index", "chng")
+  ident_table_dt <- data.table::as.data.table(ident_table)
+  colnames(ident_table_dt) <- c("index", "ident")
+  both_dt <- merge(chng_table_dt, ident_table_dt, by="index")
+  both_dt[["prop"]] <- both_dt[["chng"]] / (both_dt[["chng"]] + both_dt[["ident"]])
+  kept_idx <- both_dt[["prop"]] >= min_proportion
+  wanted_indexes_dt <- both_dt[kept_idx, ]
+  kept_idx <- chng[["index"]] %in% wanted_indexes_dt[["index"]]
+  chng <- chng[kept_idx, ]
+
+  post_rows <- nrow(chng)
+  post_ident <- nrow(ident)
+  pct_rows <- scales::percent(x=post_rows / pre_rows, accuracy=0.01)
+  pct_ident <- scales::percent(x=post_ident / pre_ident, accuracy=0.01)
+  if (verbose) {
+    message("All data: after proportion filtering, there are: ",
+            post_rows, " changed reads: ", pct_rows, ".")
+    message("All data: after proportion filtering, there are: ",
+            post_ident, " identical reads: ", pct_ident, ".")
+  }
+  retlist <- list(
+    "chng_start" = pre_rows,
+    "chng_removed" = pre_rows - post_rows,
+    "chng_remaining" = post_rows,
+    "chng" = chng,
+    "ident_start" = pre_ident,
+    "ident_removed" = pre_ident - post_ident,
+    "ident_remaining" = post_ident,
+    "ident" = ident)
 }
 
 #' Filter away reads which are associated with indexes that have been deemed
@@ -148,9 +201,9 @@ filter_max_mutations <- function(chng, mutation_df,
 #' @param chng Data set of reads which are not identical to the template.
 #' @param ident Data set of reads which are identical to the template.
 #' @param wanted_indexes Character vector of indexes which have sufficient
-#'   evidence.
+#'  evidence.
 #' @param min_reads Used when verbose to remind us of the number of
-#'   reads/index.
+#'  reads/index.
 #' @param verbose Print some information while running?
 #' @return The remaining reads and a little summary information.
 #' @export
@@ -202,13 +255,16 @@ filter_pruned_indexes <- function(chng, ident, wanted_indexes, min_reads=3, verb
 #' @param min_reads Minimum read / index filter.
 #' @param verbose Print information about this while it runs?
 #' @return List with the summary of the numbers of reads observed and the
-#'   indexes kept.  The list of indexes kept may just be 'all'.
+#'  indexes kept.  The list of indexes kept may just be 'all'.
 #' @export
 prune_indexes <- function(chng, ident, min_reads=3, verbose=TRUE) {
   ## Get a matrix of how many reads/index are identical to the template.
   if (verbose) {
     message("Gathering information about the number of reads per index.")
   }
+
+  ## Suck it r cmd check
+  index <- NULL
   sum_ident <- ident %>%
     group_by(index) %>%
     summarise("ident_reads" = n())

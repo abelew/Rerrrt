@@ -5,12 +5,39 @@
 \title{Make a pretty xlsx file of the various summary statistics and data from an RT
 error rate experiment.}
 \usage{
-write_matrices(retlist, excel)
+write_matrices(
+  retlst,
+  excel,
+  min_reads = NULL,
+  min_indexes = NULL,
+  min_sequencer = 10,
+  min_position = NULL,
+  max_position = NULL,
+  max_mutations_per_read = NULL,
+  prune_n = TRUE,
+  verbose = FALSE
+)
 }
 \arguments{
-\item{retlist}{Result from create_matrices()}
+\item{retlst}{Result from create_matrices()}
 
 \item{excel}{Excel filename.}
+
+\item{min_reads}{Written to a summary table.}
+
+\item{min_indexes}{Written to a summary table.}
+
+\item{min_sequencer}{Written to a summary table.}
+
+\item{min_position}{Written to a summary table.}
+
+\item{max_position}{Written to a summary table.}
+
+\item{max_mutations_per_read}{Written to a summary table.}
+
+\item{prune_n}{Written to a summary table.}
+
+\item{verbose}{Print!}
 }
 \description{
 This takes the results of create_matrices() and hopefully prints some pretty

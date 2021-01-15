@@ -4,13 +4,12 @@
 \alias{barplot_matrices}
 \title{Make a bar plot for every type of data returned by create_matrices.}
 \usage{
-barplot_matrices(summary)
+barplot_matrices(retlist, bar_title = "")
 }
 \arguments{
-\item{summary}{Result from create_matrices()}
-}
-\value{
-List full of bar plots!
+\item{retlist}{Result from create_matrices() with all the fun stuff to plot.}
+
+\item{bar_title}{Title for the plot.}
 }
 \description{
 The function create_matrices() creates two lists containing the various

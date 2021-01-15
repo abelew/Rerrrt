@@ -10,14 +10,17 @@ Description: This is the R component of my current method for analyzing
              error rates of RT via sequencing.  In its current form, it is intended
              to be used with errrt: github.com/abelew/errrt.
 License: GPL-2 | file LICENSE
-Depends: dplyr, tidyr
+Imports: data.table, dplyr, edgeR, glue, ggplot2, hpgltools,
+         magrittr, methods, openxlsx, readr, reshape2, scales, stringr
+Suggests: knitr
 VignetteBuilder: knitr
 ByteCompile: true
 Encoding: UTF-8
-RoxygenNote: 7.0.2
+RoxygenNote: 7.1.1
 Collate:
     '01_errRt.r'
     'classify.r'
+    'dna_convert.r'
     'error_rate.r'
     'filters.r'
     'matrices.r'

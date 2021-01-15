@@ -31,7 +31,7 @@ document: roxygen vignette reference
 
 install:
 	@echo "Performing R CMD INSTALL errRt."
-	R CMD INSTALL .
+	R CMD INSTALL --install-tests .
 
 reference:
 	@echo "Generating reference manual with R CMD Rd2pdf"
