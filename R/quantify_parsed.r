@@ -1,53 +1,3 @@
-#' Combine the columns describing a mutation into a single column and categorize.
-#'
-#' Given a table with columns including the position, mutation type, reference
-#' nt at that position, and product nt at that position; create a single column
-#' from it, standardize it, and make some categories describing each mutation.
-#' These columns currently include:  'mt': X_Y telling that this is a mutation
-#' from X to Y, 'transition_transversion': this is a transition or transversion
-#' mismatch, 'strong_weak': this mismatch went from strong->weak, weak->strong,
-#' weak->weak, or strong->strong.  undef is used in the case of indels.
-#'
-#' @param t Table from readr.
-#' @return The same table with some new columns describing the mutations therein.
-expand_mutation_string <- function(t) {
-  t[["string"]] <- paste0(t[["position"]], "_",
-                          t[["type"]], "_",
-                          t[["reference"]], "_",
-                          t[["hit"]])
-  t[["string"]] <- gsub(x=t[["string"]],
-                        pattern="^([[:digit:]])_",
-                        replacement="00\\1_")
-  t[["string"]] <- gsub(x=t[["string"]],
-                        pattern="^([[:digit:]][[:digit:]])_",
-                        replacement="0\\1_")
-  t[["string"]] <- as.factor(t[["string"]])
-  t[["mt"]] <- paste0(t[["reference"]], "_", t[["hit"]])
-  t[["transition_transversion"]] <- "undef"
-  transition_idx <- t[["mt"]] == "A_G" | t[["mt"]] == "G_A" |
-    t[["mt"]] == "T_C" | t[["mt"]] == "C_T"
-  t[transition_idx, "transition_transversion"] <- "transition"
-  transversion_idx <- t[["mt"]] == "A_T" | t[["mt"]] == "A_C" |
-    t[["mt"]] == "T_A" | t[["mt"]] == "C_A" |
-    t[["mt"]] == "G_C" | t[["mt"]] == "G_T" |
-    t[["mt"]] == "C_G" | t[["mt"]] == "T_G"
-  t[transversion_idx, "transition_transversion"] <- "transversion"
-  t[["transition_transversion"]] <- as.factor(t[["transition_transversion"]])
-  t[["strong_weak"]] <- "undef"
-  weak_strong_idx <- t[["mt"]] == "A_G" | t[["mt"]] == "T_G" |
-    t[["mt"]] == "A_C" | t[["mt"]] == "T_C"
-  t[weak_strong_idx, "strong_weak"] <- "weak_strong"
-  strong_weak_idx <- t[["mt"]] == "G_A" | t[["mt"]] == "G_T" |
-    t[["mt"]] == "C_A" | t[["mt"]] == "C_T"
-  t[strong_weak_idx, "strong_weak"] <- "strong_weak"
-  weak_weak_idx <- t[["mt"]] == "A_T" | t[["mt"]] == "T_A"
-  t[weak_weak_idx, "strong_weak"] <- "weak_weak"
-  strong_strong_idx <- t[["mt"]] == "G_C" | t[["mt"]] == "C_G"
-  t[strong_strong_idx, "strong_weak"] <- "strong_strong"
-  t[["strong_weak"]] <- as.factor(t[["strong_weak"]])
-  return(t)
-}
-
 #' Quantify the tables of reads identical/different to/from the template sequence.
 #'
 #' The heavy lifting of locating reads which are/not identical to the template was
@@ -71,14 +21,15 @@ expand_mutation_string <- function(t) {
 #' @param max_position Filter mutations after this position?
 #' @param max_mutations_per_read If a read has more than this number of mutations, drop it.
 #' @param reencode Rewrite the indexes on a different scale to save memory (6 bit instead of 2)
+#' @param pre_indexes Dataframe of the number of reads for each index during preprocessing.
 #' @param verbose Print information describing what is happening while this runs.
 #' @return List containing a bunch of summary information about the data.
 #' @export
 quantify_parsed <- function(changed=NULL, identical=NULL, min_reads=NULL,
                             min_indexes=NULL, min_sequencer=10, prune_n=TRUE,
                             min_position=24, max_position=176,
-                            max_mutations_per_read=NULL, reencode=FALSE,
-                            verbose=TRUE) {
+                            max_mutations_per_read=10, reencode=FALSE,
+                            verbose=TRUE, pre_indexes=NULL) {
   if (verbose) {
     message("  Reading the file containing mutations: ", changed)
   }
@@ -86,6 +37,9 @@ quantify_parsed <- function(changed=NULL, identical=NULL, min_reads=NULL,
                           ##col_names=c("readid", "index", "direciton"
                           ##            "position", "type", "ref", "hit"))
                           col_types=c("ncfnccc"), col_names=TRUE)
+  ## IMPORTANT: Deletions set the hit column to NA and lead to problems later down.
+  na_idx <- is.na(chng[["hit"]])
+  chng[na_idx, "hit"] <- ""
   if (verbose) {
     message("  Reading the file containing the identical reads: ", identical)
   }
@@ -96,6 +50,42 @@ quantify_parsed <- function(changed=NULL, identical=NULL, min_reads=NULL,
     ident <- rbind(colnames(ident), ident)
     colnames(ident) <- c("read_num", "direction", "index")
   }
+
+  ## The reads in chng and ident should sum to the reads in pre_indexes
+  ## The problem with doing this in the following fashion lies in the following:
+  ## Lots of reads have >1 mutation, as a result table(chng_table) will over-represent the
+  ## indexes for those reads.  For ident_table, this is fine.
+  ##ident_table <- as.data.frame(table(ident[["index"]]))
+  ##colnames(ident_table) <- c("tag", "ident_num")
+  ##chng_table <- as.data.frame(table(chng[["index"]]))
+  ##colnames(chng_table) <- c("tag", "chng_num")
+  ##query_table <- merge(data.table::as.data.table(ident_table),
+  ##                     data.table::as.data.table(chng_table), by = "tag", all = TRUE)
+  ##query_table <- merge(data.table::as.data.table(query_table),
+  ##                     data.table::as.data.table(pre_indexes), by = "tag", all = TRUE)
+  ##na_idx <- is.na(query_table)
+  ##query_table[na_idx] <- 0
+
+  ident_table <- as.data.frame(table(ident[["index"]]))
+  colnames(ident_table) <- c("tag", "ident_num")
+  ident_table <- data.table::as.data.table(ident_table)
+
+  ## Instead of using table() as before, I will count by readid.
+  chng_table_order <- order(chng[["readid"]])
+  chng_table <- chng[chng_table_order, ]
+  chng_unique_reads_idx <- !duplicated(chng_table[["readid"]])
+  chng_tag_table <- chng_table[chng_unique_reads_idx, ]
+  chng_tags_order <- order(chng_tag_table[["index"]])
+  chng_tags <- chng_tag_table[["index"]][chng_tags_order]
+  chng_tag_df <- as.data.frame(table(chng_tag_table[["index"]]))
+  colnames(chng_tag_df) <- c("tag", "chng_num")
+  chng_table <- data.table::as.data.table(chng_tag_df)
+
+  query_table <- merge(ident_table, chng_table, by = "tag", all = TRUE)
+  na_idx <- is.na(query_table)
+  query_table[na_idx] <- 0
+  query_table[["num"]] <- query_table[["chng_num"]] + query_table[["ident_num"]]
+  query_table <- query_table[, c("tag", "num")]
 
   ## This was an effort to lower the memory usage.
   ## It did work, but takes significant time.
@@ -116,10 +106,16 @@ quantify_parsed <- function(changed=NULL, identical=NULL, min_reads=NULL,
 
   ## go away r cmd check
   readid <- NULL
+  ## Note that this is called 'mutations_by_read' as opposed to 'tags_by_read' because there may
+  ## be multiple mutations in a single read.
   mutations_by_read <- chng %>%
     group_by(readid) %>%
     summarise("read_mutants" = n())
   mutations_by_read[["readid"]] <- as.character(mutations_by_read[["readid"]])
+  if (verbose) {
+    message("Here is a table of the number of mutants observed per read.")
+    print(table(mutations_by_read[["read_mutants"]]))
+  }
 
   filtered <- c(0, 0, 0, 0, 0, 0)
   names(filtered) <- c("min_position", "max_position", "prune_n",
@@ -185,7 +181,6 @@ quantify_parsed <- function(changed=NULL, identical=NULL, min_reads=NULL,
     message("  Mutation data: all filters removed ",
             sum_removed, " reads, or ", sum_pct, ".")
   }
-
 
   ## Get some information about the numbers of indexes in the data.
   pruned <- prune_indexes(chng, ident, min_reads=min_reads, verbose=verbose)

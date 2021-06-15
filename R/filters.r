@@ -14,7 +14,7 @@ filter_min_position <- function(chng, min_position=24, verbose=FALSE) {
   if (verbose) {
     message("   Mutation data: removing any differences before position: ",
             min_position, ".")
-    message("   Mutation data: before pruning, there are: ", pre_rows, " reads.")
+    message("   Mutation data: before pruning, there are: ", pre_rows, " mutations.")
   }
   min_idx <- chng[["position"]] >= min_position
   chng <- chng[min_idx, ]
@@ -24,7 +24,7 @@ filter_min_position <- function(chng, min_position=24, verbose=FALSE) {
   pct_diff <- scales::percent(x=pct, accuracy=0.01)
   if (verbose) {
     message("   Mutation data: after min-position pruning, there are: ",
-            post_rows, " reads: ", delta, " lost or ", pct_diff, ".")
+            post_rows, " mutations: ", delta, " lost or ", pct_diff, ".")
   }
   retlist <- list(
     "start" = pre_rows,
@@ -50,7 +50,7 @@ filter_max_position <- function(chng, max_position=176, verbose=FALSE) {
   if (verbose) {
     message("   Mutation data: removing any differences after position: ",
             max_position, ".")
-    message("   Mutation data: before pruning, there are: ", pre_rows, " reads.")
+    message("   Mutation data: before pruning, there are: ", pre_rows, " mutations.")
   }
   min_idx <- chng[["position"]] <= max_position
   chng <- chng[min_idx, ]
@@ -60,7 +60,7 @@ filter_max_position <- function(chng, max_position=176, verbose=FALSE) {
   pct_diff <- scales::percent(x=pct, accuracy=0.01)
   if (verbose) {
     message("   Mutation data: after max-position pruning, there are: ",
-            post_rows, " reads: ", delta, " lost or ", pct_diff, ".")
+            post_rows, " mutations: ", delta, " lost or ", pct_diff, ".")
   }
   retlist <- list(
     "start" = pre_rows,
@@ -82,7 +82,7 @@ filter_max_position <- function(chng, max_position=176, verbose=FALSE) {
 filter_ns <- function(chng, verbose=FALSE) {
   pre_rows <- nrow(chng)
   if (verbose) {
-    message("   Mutation data: removing any reads with 'N' as the hit.")
+    message("   Mutation data: removing any mutations with 'N' as the hit.")
     n_idx <- chng[["hit"]] != "N"
     chng <- chng[n_idx, ]
     post_rows <- nrow(chng)
@@ -90,7 +90,7 @@ filter_ns <- function(chng, verbose=FALSE) {
     delta <- pre_rows - post_rows
     pct_diff <- scales::percent(x=pct, accuracy=0.01)
     message("   Mutation data: after N pruning, there are: ",
-            post_rows, " reads: ", delta, " lost or ", pct_diff, ".")
+            post_rows, " mutations: ", delta, " lost or ", pct_diff, ".")
   }
   retlist <- list(
     "start" = pre_rows,
@@ -116,9 +116,11 @@ filter_ns <- function(chng, verbose=FALSE) {
 filter_max_mutations <- function(chng, mutation_df,
                                  max_mutations_per_read=10, verbose=FALSE) {
   pre_rows <- nrow(chng)
-  message("   Mutation data: removing reads with greater than ",
+  message("   Mutation data: removing reads/mutations with greater than ",
           max_mutations_per_read, " mutations.")
   excluded_readid_idx <- mutation_df[["read_mutants"]] > max_mutations_per_read
+  num_reads_excluded <- sum(excluded_readid_idx)
+  message("   Mutation data: removing ", num_reads_excluded, " reads.")
   excluded_readids <- mutation_df[excluded_readid_idx, "readid"][["readid"]]
   excluded_idx <- chng[["readid"]] %in% excluded_readids
   chng <- chng[!excluded_idx, ]
@@ -127,7 +129,7 @@ filter_max_mutations <- function(chng, mutation_df,
   delta <- pre_rows - post_rows
   pct_diff <- scales::percent(x=pct, accuracy=0.01)
   message("   Mutation data: after max_mutation pruning, there are: ",
-          post_rows, " reads: ", delta, " lost or ", pct_diff, ".")
+          post_rows, " mutations: ", delta, " lost or ", pct_diff, ".")
   retlist <- list(
     "start" = pre_rows,
     "removed" = delta,
@@ -225,7 +227,7 @@ filter_pruned_indexes <- function(chng, ident, wanted_indexes, min_reads=3, verb
   pct_ident <- scales::percent(x=post_ident / pre_ident, accuracy=0.01)
   if (verbose) {
     message("All data: after index pruning, there are: ",
-            post_rows, " changed reads: ", pct_rows, ".")
+            post_rows, " mutations : ", pct_rows, ".")
     message("All data: after index pruning, there are: ",
             post_ident, " identical reads: ", pct_ident, ".")
   }
