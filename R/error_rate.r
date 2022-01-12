@@ -2,7 +2,7 @@
 #'
 #' I say 'lower limit' because I assume my set of sequencer-based errors did not
 #' detect the full set of error actually from the sequencer.  I chose to take
-#' only the set with >= 10 reads / index for which only n (1) read(s) is a
+#' only the set with >= 10 reads / tag for which only n (1) read(s) is a
 #' mutant.  My hope is that this will avoid false positives, but it will also
 #' limit the perceived sequencer error rate.
 #'
@@ -19,13 +19,13 @@ sequencer_error <- function(data_summary) {
 
   for (s in 1:length(data_summary[["samples"]])) {
     sname <- names(data_summary[["samples"]])[s]
-    ## Each row of the strict_sequencer table represents 1 error / index for n reads.
+    ## Each row of the strict_sequencer table represents 1 error / tag for n reads.
     sequencer_errors <- c(nrow(data_summary[["samples"]][[sname]][["strict_sequencer"]]), sequencer_errors)
-    ## Therefore for each of those errors, the ident_reads column tells us how many nucleotide in the identical reads for those indexes were read.
+    ## Therefore for each of those errors, the ident_reads column tells us how many nucleotide in the identical reads for those tags were read.
     sequencer_idents <- c(sum(data_summary[["samples"]][[sname]][["strict_sequencer"]][["ident_reads"]]), sequencer_idents)
     ## We also have the population of identical reads.
     idents <- c(sum(data_summary[["samples"]][[sname]][["ident_table"]][["all_reads"]]), idents)
-    ## Reads from indexes with only mutations
+    ## Reads from tags with only mutations
     only_muts <- c(sum(data_summary[["samples"]][[sname]][["only_mutants"]][["all_reads"]]), only_muts)
   }
 

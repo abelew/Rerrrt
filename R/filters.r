@@ -144,30 +144,30 @@ filter_max_mutations <- function(chng, mutation_df,
 #'
 #' @param chng Table of changed reads.
 #' @param ident Table of identical reads.
-#' @param min_proportion Minimum proportion of changed/identical reads/index.
+#' @param min_proportion Minimum proportion of changed/identical reads/tag.
 #' @param verbose Print while running.
 filter_proportion <- function(chng, ident, min_proportion=0.5, verbose=FALSE) {
   pre_rows <- nrow(chng)
   pre_ident <- nrow(ident)
   if (verbose) {
-    message("All data: removing indexes with less than ", min_proportion, " mutant/identical reads/index.")
+    message("All data: removing tags with less than ", min_proportion, " mutant/identical reads/tag.")
     message("All data: before proportion filtering, there are: ", pre_rows, " changed reads.")
     message("All data: before proportion filtering, there are: ", pre_ident, " identical reads.")
   }
 
-  chng_table <- table(chng[["index"]])
-  gt_zero <- ident[["index"]] %in% names(chng_table)
-  ident_subset <- ident[gt_zero, "index"]
+  chng_table <- table(chng[["tag"]])
+  gt_zero <- ident[["tag"]] %in% names(chng_table)
+  ident_subset <- ident[gt_zero, "tag"]
   ident_table <- table(ident_subset)
   chng_table_dt <- data.table::as.data.table(chng_table)
-  colnames(chng_table_dt) <- c("index", "chng")
+  colnames(chng_table_dt) <- c("tag", "chng")
   ident_table_dt <- data.table::as.data.table(ident_table)
-  colnames(ident_table_dt) <- c("index", "ident")
-  both_dt <- merge(chng_table_dt, ident_table_dt, by="index")
+  colnames(ident_table_dt) <- c("tag", "ident")
+  both_dt <- merge(chng_table_dt, ident_table_dt, by="tag")
   both_dt[["prop"]] <- both_dt[["chng"]] / (both_dt[["chng"]] + both_dt[["ident"]])
   kept_idx <- both_dt[["prop"]] >= min_proportion
-  wanted_indexes_dt <- both_dt[kept_idx, ]
-  kept_idx <- chng[["index"]] %in% wanted_indexes_dt[["index"]]
+  wanted_tags_dt <- both_dt[kept_idx, ]
+  kept_idx <- chng[["tag"]] %in% wanted_tags_dt[["tag"]]
   chng <- chng[kept_idx, ]
 
   post_rows <- nrow(chng)
@@ -191,44 +191,44 @@ filter_proportion <- function(chng, ident, min_proportion=0.5, verbose=FALSE) {
     "ident" = ident)
 }
 
-#' Filter away reads which are associated with indexes that have been deemed
-#' insufficient.  These 'bad' indexes were defined by prune_indexes().
+#' Filter away reads which are associated with tags that have been deemed
+#' insufficient.  These 'bad' tags were defined by prune_tags().
 #'
-#' At least in theory we should have at least x reads per index before that
-#' index is deemed interesting.  prune_indexes() creates a list of indexes which
-#' have more than this x reads per index and provides it to this.  This then
+#' At least in theory we should have at least x reads per tag before that
+#' tag is deemed interesting.  prune_tags() creates a list of tags which
+#' have more than this x reads per tag and provides it to this.  This then
 #' removes the rest.  Caveat: this filter works on both the mutated and
 #' identical data.
 #'
 #' @param chng Data set of reads which are not identical to the template.
 #' @param ident Data set of reads which are identical to the template.
-#' @param wanted_indexes Character vector of indexes which have sufficient
+#' @param wanted_tags Character vector of tags which have sufficient
 #'  evidence.
 #' @param min_reads Used when verbose to remind us of the number of
-#'  reads/index.
+#'  reads/tag.
 #' @param verbose Print some information while running?
 #' @return The remaining reads and a little summary information.
 #' @export
-filter_pruned_indexes <- function(chng, ident, wanted_indexes, min_reads=3, verbose=FALSE) {
+filter_pruned_tags <- function(chng, ident, wanted_tags, min_reads=3, verbose=FALSE) {
   pre_rows <- nrow(chng)
   pre_ident <- nrow(ident)
   if (verbose) {
-    message("All data: removing indexes with fewer than ", min_reads, " reads/index.")
-    message("All data: before reads/index pruning, there are: ", pre_rows, " changed reads.")
-    message("All data: before reads/index pruning, there are: ", pre_ident, " identical reads.")
+    message("All data: removing tags with fewer than ", min_reads, " reads/tag.")
+    message("All data: before reads/tag pruning, there are: ", pre_rows, " changed reads.")
+    message("All data: before reads/tag pruning, there are: ", pre_ident, " identical reads.")
   }
-  kept_idx <- chng[["index"]] %in% wanted_indexes
+  kept_idx <- chng[["tag"]] %in% wanted_tags
   chng <- chng[kept_idx, ]
-  kept_idx <- ident[["index"]] %in% wanted_indexes
+  kept_idx <- ident[["tag"]] %in% wanted_tags
   ident <- ident[kept_idx, ]
   post_rows <- nrow(chng)
   post_ident <- nrow(ident)
   pct_rows <- scales::percent(x=post_rows / pre_rows, accuracy=0.01)
   pct_ident <- scales::percent(x=post_ident / pre_ident, accuracy=0.01)
   if (verbose) {
-    message("All data: after index pruning, there are: ",
+    message("All data: after tag pruning, there are: ",
             post_rows, " mutations : ", pct_rows, ".")
-    message("All data: after index pruning, there are: ",
+    message("All data: after tag pruning, there are: ",
             post_ident, " identical reads: ", pct_ident, ".")
   }
   retlist <- list(
@@ -244,66 +244,66 @@ filter_pruned_indexes <- function(chng, ident, wanted_indexes, min_reads=3, verb
 }
 
 #' Summarize the mutant/identical data with respect to the number of
-#' reads/index.
+#' reads/tag.
 #'
-#' This should provide a table of how many reads/index are (a)identical, (b)contain
+#' This should provide a table of how many reads/tag are (a)identical, (b)contain
 #' mutations, and the sum of (a + b).  If a minimum number of reads is requested
-#' (e.g. min_reads is a number), return the list of indexes which have at least
-#' that many reads.  This set of indexes may be used in other contexts to limit
+#' (e.g. min_reads is a number), return the list of tags which have at least
+#' that many reads.  This set of tags may be used in other contexts to limit
 #' the data.
 #'
 #' @param chng The result of read_tsv() on a file containing a mutation table.
 #' @param ident The result of read_tsv() on a file containing identical reads.
-#' @param min_reads Minimum read / index filter.
+#' @param min_reads Minimum read / tag filter.
 #' @param verbose Print information about this while it runs?
 #' @return List with the summary of the numbers of reads observed and the
-#'  indexes kept.  The list of indexes kept may just be 'all'.
+#'  tags kept.  The list of tags kept may just be 'all'.
 #' @export
-prune_indexes <- function(chng, ident, min_reads=3, verbose=TRUE) {
-  ## Get a matrix of how many reads/index are identical to the template.
+prune_tags <- function(chng, ident, min_reads=3, verbose=TRUE) {
+  ## Get a matrix of how many reads/tag are identical to the template.
   if (verbose) {
-    message("Gathering information about the number of reads per index.")
+    message("Gathering information about the number of reads per tag.")
   }
 
   ## Suck it r cmd check
-  index <- NULL
+  tag <- NULL
   sum_ident <- ident %>%
-    group_by(index) %>%
+    group_by(tag) %>%
     summarise("ident_reads" = n())
-  ## Get a matrix of how many reads/index exist for each mutation type.
-  sum_mut <- chng[, c("readid", "index")] %>%
+  ## Get a matrix of how many reads/tag exist for each mutation type.
+  sum_mut <- chng[, c("readid", "tag")] %>%
     distinct() %>%
-    group_by(index) %>%
+    group_by(tag) %>%
     summarise("mut_reads" = n())
   ## Convert them to data tables, merge them, and set any NAs to 0.
-  sum_all <- merge(sum_ident, sum_mut, by="index", all=TRUE)
+  sum_all <- merge(sum_ident, sum_mut, by="tag", all=TRUE)
   na_idx <- is.na(sum_all)
   sum_all[na_idx] <- 0
   ## Sum up the reads.
   sum_all[["all_reads"]] <- sum_all[["ident_reads"]] + sum_all[["mut_reads"]]
   pre_rows <- nrow(sum_all)
-  ## Extract indexes which have >= the minimum number of reads desired.
-  kept_indexes <- "all"
+  ## Extract tags which have >= the minimum number of reads desired.
+  kept_tags <- "all"
   if (is.numeric(min_reads)) {
     if (verbose) {
-      message("Before reads/index pruning, there are: ", pre_rows, " indexes in all the data.")
+      message("Before reads/tag pruning, there are: ", pre_rows, " tags in all the data.")
     }
     kept_idx <- sum_all[["all_reads"]] >= min_reads
-    kept_indexes <- sum_all[["index"]][kept_idx]
-    filtered_index_num <- length(kept_indexes)
-    pct <- 1 - (filtered_index_num / pre_rows)
+    kept_tags <- sum_all[["tag"]][kept_idx]
+    filtered_tag_num <- length(kept_tags)
+    pct <- 1 - (filtered_tag_num / pre_rows)
     pct_diff <- scales::percent(x=pct, accuracy=0.01)
-    delta <- pre_rows - filtered_index_num
+    delta <- pre_rows - filtered_tag_num
     if (verbose) {
-      message("After reads/index pruning, there are: ",
-              filtered_index_num, " indexes: ", delta, " lost or ", pct_diff, ".")
+      message("After reads/tag pruning, there are: ",
+              filtered_tag_num, " tags: ", delta, " lost or ", pct_diff, ".")
     }
   }
-  ## Return the table and indexes.
+  ## Return the table and tags.
   retlist <- list(
-    "unfiltered_index_num" = nrow(sum_all),
-    "filtered_index_num" = filtered_index_num,
-    "index_summary" = sum_all,
-    "kept_indexes" = kept_indexes)
+    "unfiltered_tag_num" = nrow(sum_all),
+    "filtered_tag_num" = filtered_tag_num,
+    "tag_summary" = sum_all,
+    "kept_tags" = kept_tags)
   return(retlist)
 }
